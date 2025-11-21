@@ -3,8 +3,9 @@
 ## Error Explanation
 
 The `RuntimeError: [enforce fail at alloc_cpu.c` error occurs when your system runs out of memory (RAM or VRAM) during training. This happens when:
+
 - Batch size is too large
-- Image size is too large  
+- Image size is too large
 - Model is too large for available memory
 - System doesn't have enough RAM/VRAM
 
@@ -89,6 +90,7 @@ python train.py --data data/dental_cavities.yaml --weights yolov5n.pt --img 416 
 ```
 
 Then gradually increase:
+
 - If successful, try `--batch-size 8`
 - If still successful, try `--img 512`
 - If still successful, try `yolov5s.pt` instead of `yolov5n.pt`
@@ -96,22 +98,26 @@ Then gradually increase:
 ## Memory Usage Guidelines
 
 **For CPU Training (RAM):**
+
 - yolov5n: ~2-4 GB RAM
 - yolov5s: ~4-8 GB RAM
 - yolov5m: ~8-16 GB RAM
 
 **For GPU Training (VRAM):**
+
 - yolov5n: ~2-4 GB VRAM
 - yolov5s: ~4-6 GB VRAM
 - yolov5m: ~6-10 GB VRAM
 
 **Batch Size Impact:**
+
 - Each batch size increase roughly doubles memory usage
 - Image size 640 uses ~2.5x more memory than 416
 
 ## Check Your System Memory
 
 **Windows:**
+
 ```powershell
 # Check RAM
 Get-CimInstance Win32_OperatingSystem | Select-Object TotalVisibleMemorySize, FreePhysicalMemory
@@ -121,8 +127,10 @@ nvidia-smi
 ```
 
 **Python:**
+
 ```python
 import psutil
+
 print(f"RAM: {psutil.virtual_memory().total / (1024**3):.2f} GB")
 print(f"Available: {psutil.virtual_memory().available / (1024**3):.2f} GB")
 ```
@@ -150,6 +158,7 @@ python train.py --data data/dental_cavities.yaml --weights yolov5s.pt --img 416 
 ## Troubleshooting Steps
 
 1. **Start with the smallest configuration:**
+
    ```bash
    python train.py --data data/dental_cavities.yaml --weights yolov5n.pt --img 320 --batch-size 2 --device cpu
    ```
@@ -180,4 +189,3 @@ python train.py --data data/dental_cavities.yaml --weights yolov5s.pt --img 416 
 # Step 5: Full training with optimal settings
 python train.py --data data/dental_cavities.yaml --weights yolov5s.pt --img 416 --batch-size 4 --epochs 100
 ```
-
