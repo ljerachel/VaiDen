@@ -1,6 +1,7 @@
 # Quick Baseline Training Guide
 
 For getting a baseline performance model quickly, use fewer epochs. This is perfect for:
+
 - Testing if your dataset is set up correctly
 - Getting initial results quickly
 - Checking if training works on your system
@@ -9,16 +10,19 @@ For getting a baseline performance model quickly, use fewer epochs. This is perf
 ## Quick Baseline Commands
 
 ### Minimal Baseline (Fastest - ~5-10 minutes)
+
 ```bash
 python train.py --data data/dental_cavities.yaml --weights yolov5n.pt --img 416 --epochs 5 --batch-size 4
 ```
 
 ### Standard Baseline (Recommended - ~15-30 minutes)
+
 ```bash
 python train.py --data data/dental_cavities.yaml --weights yolov5s.pt --img 416 --epochs 10 --batch-size 4
 ```
 
 ### Better Baseline (More accurate - ~30-60 minutes)
+
 ```bash
 python train.py --data data/dental_cavities.yaml --weights yolov5s.pt --img 640 --epochs 20 --batch-size 4
 ```
@@ -48,6 +52,7 @@ Once you have a baseline:
    - `val_batch0_labels.jpg` - Visual predictions
 
 2. **If results look good**, train longer:
+
    ```bash
    python train.py --data data/dental_cavities.yaml --weights runs/train/exp/weights/last.pt --epochs 100 --batch-size 4
    ```
@@ -67,4 +72,3 @@ python train.py --data data/dental_cavities.yaml --weights yolov5n.pt --img 320 
 ```
 
 This uses minimal resources and will complete quickly.
-
