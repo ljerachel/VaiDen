@@ -1,0 +1,7 @@
+path: datasets/dental_cavities/images  # root containing images/ (or adjust to the actual images root)
+train: train                 # optional (relative to path)
+val: val                     # relative to path; point to your validation images directory
+nc: 2                               # number of classes
+names:
+  0: cavity
+  1: cavity_type_1

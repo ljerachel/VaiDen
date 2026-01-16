@@ -58,6 +58,7 @@ from utils.general import (
 )
 from utils.metrics import ConfusionMatrix, ap_per_class, box_iou
 from utils.plots import output_to_target, plot_images, plot_val_study
+from PIL import Image, ImageDraw
 from utils.torch_utils import select_device, smart_inference_mode
 
 
@@ -200,6 +201,9 @@ def run(
     save_hybrid=False,  # save label+prediction hybrid results to *.txt
     save_conf=False,  # save confidences in --save-txt labels
     save_json=False,  # save a COCO-JSON results file
+    save_images=True,  # save per-image annotated images for the full val set
+    save_overlay=False,  # save overlay images (GT + predictions)
+    overlay_style="simple",  # overlay style: simple, dashed, transparent, labels_only
     project=ROOT / "runs/val",  # save to project/name
     name="exp",  # save to project/name
     exist_ok=False,  # existing project/name ok, do not increment
@@ -386,6 +390,84 @@ def run(
                 save_one_txt(predn, save_conf, shape, file=save_dir / "labels" / f"{path.stem}.txt")
             if save_json:
                 save_one_json(predn, jdict, path, class_map)  # append to COCO-JSON dictionary
+            # Save per-image annotated images (labels and predictions)
+            if plots and save_images:
+                (save_dir / "images").mkdir(parents=True, exist_ok=True)
+                # single image tensor
+                im_single = im[si : si + 1]
+                # labels for this image: reset batch index to 0 for plotting a single-image batch
+                if targets is not None and targets.numel() > 0:
+                    lab = targets[targets[:, 0] == si].clone()
+                    if lab.numel() > 0:
+                        lab[:, 0] = 0
+                    else:
+                        lab = torch.zeros((0, 6), device=targets.device)
+                else:
+                    lab = torch.zeros((0, 6))
+
+                # save label (ground-truth) image and prediction image for this single image
+                plot_images(im_single, lab, paths=[path], fname=save_dir / "images" / f"{path.stem}_labels.jpg", names=names)
+                plot_images(im_single, output_to_target([pred]), paths=[path], fname=save_dir / "images" / f"{path.stem}_pred.jpg", names=names)
+                # overlay (GT + predictions)
+                if save_overlay:
+                    try:
+                        im_np = (im_single[0].permute(1, 2, 0).cpu().numpy() * 255).astype(np.uint8)
+                        img = Image.fromarray(im_np)
+                        overlay = Image.new("RGBA", img.size, (255, 255, 255, 0))
+                        draw = ImageDraw.Draw(overlay)
+
+                        # draw GT boxes (from lab). lab format: [batch, class, x_center, y_center, w, h] in pixels
+                        if isinstance(lab, torch.Tensor) and lab.numel() > 0:
+                            boxes = lab[:, 2:6].cpu().numpy()
+                            classes = lab[:, 1].cpu().numpy().astype(int)
+                            for (x_c, y_c, w_box, h_box), cls in zip(boxes, classes):
+                                x1 = x_c - w_box / 2
+                                y1 = y_c - h_box / 2
+                                x2 = x_c + w_box / 2
+                                y2 = y_c + h_box / 2
+                                if overlay_style == "transparent":
+                                    draw.rectangle([x1, y1, x2, y2], fill=(0, 255, 0, 80), outline=(0, 255, 0, 255), width=2)
+                                else:
+                                    draw.rectangle([x1, y1, x2, y2], outline=(0, 255, 0, 255), width=3)
+                                # label text
+                                try:
+                                    txt = names[int(cls)] if names else str(int(cls))
+                                    draw.text((x1 + 3, y1 + 3), txt, fill=(255, 255, 255, 255))
+                                except Exception:
+                                    pass
+
+                        # draw predictions (predn is xyxy, conf, cls)
+                        if isinstance(predn, torch.Tensor) and predn.numel() > 0:
+                            preds_np = predn.cpu().numpy()
+                            for p in preds_np:
+                                x1, y1, x2, y2, conf_p, cls_p = p.tolist()
+                                if overlay_style == "dashed":
+                                    # dashed rectangle: draw short segments along edges
+                                    dash = 6
+                                    for x in range(int(x1), int(x2), dash * 2):
+                                        draw.line([(x, int(y1)), (min(x + dash, int(x2)), int(y1))], fill=(255, 0, 0, 255), width=2)
+                                        draw.line([(x, int(y2)), (min(x + dash, int(x2)), int(y2))], fill=(255, 0, 0, 255), width=2)
+                                    for y in range(int(y1), int(y2), dash * 2):
+                                        draw.line([(int(x1), y), (int(x1), min(y + dash, int(y2)))], fill=(255, 0, 0, 255), width=2)
+                                        draw.line([(int(x2), y), (int(x2), min(y + dash, int(y2)))], fill=(255, 0, 0, 255), width=2)
+                                else:
+                                    if overlay_style == "transparent":
+                                        draw.rectangle([x1, y1, x2, y2], outline=(255, 0, 0, 255), width=2)
+                                    else:
+                                        draw.rectangle([x1, y1, x2, y2], outline=(255, 0, 0, 255), width=2)
+                                # prediction label
+                                try:
+                                    txt = f"{names[int(cls_p)] if names else int(cls_p)} {conf_p:.2f}"
+                                    if overlay_style == "labels_only":
+                                        txt = names[int(cls_p)] if names else int(cls_p)
+                                    draw.text((x1 + 3, y1 + 3), txt, fill=(255, 255, 255, 255))
+                                except Exception:
+                                    pass
+
+                        out = Image.alpha_composite(img.convert("RGBA"), overlay)
+                        out.convert("RGB").save(save_dir / "images" / f"{path.stem}_overlay_{overlay_style}.jpg", quality=95)
+                    except Exception as e:
+                        LOGGER.info(f"Warning: overlay save failed for {path}: {e}")
             callbacks.run("on_val_image_end", pred, predn, path, names, im[si])
 
         # Plot images
@@ -529,6 +611,14 @@ def parse_opt():
     parser.add_argument("--save-hybrid", action="store_true", help="save label+prediction hybrid results to *.txt")
     parser.add_argument("--save-conf", action="store_true", help="save confidences in --save-txt labels")
     parser.add_argument("--save-json", action="store_true", help="save a COCO-JSON results file")
+    parser.add_argument("--save-images", action="store_true", help="save per-image annotated images for validation")
+    parser.add_argument("--save-overlay", action="store_true", help="save per-image overlay of GT and predictions")
+    parser.add_argument(
+        "--overlay-style",
+        default="simple",
+        choices=["simple", "dashed", "transparent", "labels_only"],
+        help="overlay style: simple, dashed, transparent, labels_only",
+    )
     parser.add_argument("--project", default=ROOT / "runs/val", help="save to project/name")
     parser.add_argument("--name", default="exp", help="save to project/name")
     parser.add_argument("--exist-ok", action="store_true", help="existing project/name ok, do not increment")
